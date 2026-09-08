@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CSI OpenBase</title>
+  <link rel="stylesheet" href="/static/local.css">
+  <script src="/static/vendor/lucide.min.js" defer></script>
+  <script src="/static/local.js" defer></script>
+</head>
+<body data-active-jobs="{{ active_jobs }}" data-latest-job="{{ jobs[0].id if jobs else '' }}">
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark">CSI</span><strong>OpenBase</strong></div>
+    <div class="header-status">
+      <span class="status-dot {{ 'ok' if authorized else 'idle' }}"></span>
+      <span>{{ account.display_name if authorized else '未连接账号' }}</span>
+    </div>
+  </header>
+
+  {% if flashes %}
+  <div class="toast-stack" aria-live="polite">
+    {% for flash in flashes %}<div class="toast toast-{{ flash.kind }}">{{ flash.message }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  <main>
+    <section class="overview-band">
+      <div>
+        <h1>本地归档</h1>
+        <p class="path" title="{{ data_home }}">{{ data_home }}</p>
+      </div>
+      <dl class="summary">
+        <div><dt>视频</dt><dd>{{ videos|length }}</dd></div>
+        <div><dt>运行中</dt><dd>{{ active_jobs }}</dd></div>
+        <div><dt>最近导出</dt><dd>{{ last_export.finished_at|default('—') }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="action-band" aria-label="归档操作">
+      <form method="post" action="/actions/authorize" class="action-item">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div><span class="step">01</span><h2>账号授权</h2><p>{{ ('抖音号 ' ~ account.handle) if authorized else '等待创作者登录' }}</p></div>
+        <button type="submit" class="button {{ 'button-secondary' if authorized else 'button-primary' }}">
+          <i data-lucide="{{ 'refresh-cw' if authorized else 'log-in' }}" aria-hidden="true"></i>
+          <span>{{ '校验授权' if authorized else '连接账号' }}</span>
+        </button>
+      </form>
+
+      <form method="post" action="/actions/sync-videos" class="action-item">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div><span class="step">02</span><h2>视频档案</h2><p>{{ last_discovery.summary|default('尚未同步') }}</p></div>
+        <button type="submit" class="button button-primary" {% if not authorized %}disabled{% endif %}>
+          <i data-lucide="folder-sync" aria-hidden="true"></i><span>同步个人主页</span>
+        </button>
+      </form>
+
+      <form method="post" action="/actions/export" class="action-item">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div><span class="step">03</span><h2>创作者数据</h2><p>{{ last_export.summary|default('尚未导出') }}</p></div>
+        <button type="submit" class="button button-primary" {% if not authorized or not video_synced %}disabled{% endif %}>
+          <i data-lucide="download" aria-hidden="true"></i><span>导出全部表格</span>
+        </button>
+      </form>
+    </section>
+
+    <section class="content-band">
+      <div class="section-heading">
+        <div><h2>视频档案</h2><span>{{ videos|length }} 个视频</span></div>
+        {% if videos %}<button class="button button-secondary" type="submit" form="comment-batch"><i data-lucide="message-square-down" aria-hidden="true"></i><span>导出所选评论</span></button>{% endif %}
+      </div>
+      <form method="post" action="/comments/batch" id="comment-batch">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th class="select-cell"><input type="checkbox" data-select-all aria-label="选择全部视频"></th><th>视频</th><th>首次发现</th><th>最近同步</th><th>评论</th><th class="action-cell">操作</th></tr></thead>
+            <tbody>
+              {% for video in videos %}
+              <tr>
+                <td class="select-cell"><input type="checkbox" name="video_id" value="{{ video.video_id }}" aria-label="选择 {{ video.title }}"></td>
+                <td><a href="{{ video.video_url }}" target="_blank" rel="noopener noreferrer" class="video-title">{{ video.title }}</a><code>{{ video.video_id }}</code></td>
+                <td><time>{{ video.first_seen_at }}</time></td>
+                <td><time>{{ video.last_seen_at }}</time></td>
+                <td><strong>{{ video.comment_count }}</strong><span class="cell-note">{{ video.last_comment_export_at|default('尚未导出', true) }}</span></td>
+                <td class="action-cell"><button type="submit" class="icon-button" formmethod="post" formaction="/videos/{{ video.video_id }}/comments" title="导出评论"><i data-lucide="play" aria-hidden="true"></i><span class="sr-only">导出评论</span></button></td>
+              </tr>
+              {% else %}
+              <tr><td colspan="6" class="empty">暂无视频档案</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </form>
+    </section>
+
+    <section class="content-band history-band">
+      <div class="section-heading"><div><h2>任务记录</h2><span>仅执行用户主动创建的任务</span></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>编号</th><th>任务</th><th>视频</th><th>状态</th><th>开始时间</th><th>结果</th></tr></thead>
+          <tbody>
+            {% for job in jobs %}
+            <tr><td>#{{ job.id }}</td><td>{{ {'authorize':'账号授权','export':'数据导出','sync_videos':'主页同步','comments':'评论导出'}.get(job.kind, job.kind) }}</td><td><code>{{ job.video_id|default('—', true) }}</code></td><td><span class="job-status status-{{ job.status }}">{{ job.status }}</span></td><td>{{ job.started_at|default(job.created_at, true) }}</td><td class="job-message">{{ job.message|default('等待执行', true) }}</td></tr>
+            {% else %}<tr><td colspan="6" class="empty">暂无任务记录</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
