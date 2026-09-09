@@ -16,9 +16,14 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
+from .local_cleanup import (
+    CLEAR_DATA_LABELS,
+    clear_local_data,
+    recover_local_cleanup,
+)
 from .local_config import LocalSettings, load_local_settings
 from .local_lock import WorkspaceLease
-from .local_store import ActiveCommentJobError, LocalStore
+from .local_store import ActiveCommentJobError, ActiveLocalJobsError, LocalStore
 from .security import add_flash, csrf_token, pop_flashes, validate_csrf
 
 
@@ -94,6 +99,7 @@ def create_local_app(
         workspace_lease.acquire()
         try:
             store.interrupt_active_jobs()
+            recover_local_cleanup(settings, store)
             if hasattr(runner, "start"):
                 runner.start()
             try:
@@ -208,6 +214,46 @@ def create_local_app(
             add_flash(request, "请先完成创作者账号授权", "error")
             return _redirect()
         return submit(request, "sync_videos")
+
+    @app.post("/actions/clear-data")
+    async def clear_data(request: Request) -> RedirectResponse:
+        form = await request.form()
+        validate_csrf(request, form)
+        scope = str(form.get("scope") or "").strip()
+        if scope not in CLEAR_DATA_LABELS:
+            add_flash(request, "请选择有效的数据清理范围", "error")
+            return _redirect()
+        if form.get("confirm_clear") != "yes":
+            add_flash(request, "请先确认清空操作无法撤销", "warning")
+            return _redirect()
+        try:
+            result = clear_local_data(settings, store, scope)
+        except ActiveLocalJobsError as exc:
+            add_flash(request, str(exc), "warning")
+        except (OSError, RuntimeError, ValueError) as exc:
+            add_flash(request, f"清空失败：{exc}", "error")
+        else:
+            if result.pending_directories:
+                add_flash(
+                    request,
+                    (
+                        f"已从当前归档清空{CLEAR_DATA_LABELS[scope]}；"
+                        f"仍有 {result.pending_directories} 个暂存目录因文件占用"
+                        "未能删除，请关闭占用程序后再次清空"
+                    ),
+                    "warning",
+                )
+            else:
+                add_flash(
+                    request,
+                    (
+                        f"已清空{CLEAR_DATA_LABELS[scope]}："
+                        f"删除 {result.files_deleted} 个文件、"
+                        f"{result.directories_deleted} 个目录"
+                    ),
+                    "success",
+                )
+        return _redirect()
 
     @app.post("/videos/{video_id}/comments")
     async def export_comments(request: Request, video_id: str) -> RedirectResponse:

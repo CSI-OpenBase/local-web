@@ -5,7 +5,9 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+import admin_app.local_app as local_app_module
 from admin_app.local_app import create_local_app
+from admin_app.local_cleanup import ClearDataResult
 from admin_app.local_config import LocalSettings
 from admin_app.local_store import LocalStore
 
@@ -58,6 +60,150 @@ def test_local_home_and_manual_authorization_job(tmp_path: Path) -> None:
         )
         assert response.status_code == 303
     assert runner.calls == [("authorize", {})]
+
+
+def test_local_home_exposes_scoped_clear_dialog(tmp_path: Path) -> None:
+    local_settings = settings(tmp_path)
+    store = LocalStore(local_settings.database_path)
+    runner = FakeRunner(store)
+
+    with TestClient(
+        create_local_app(local_settings, store=store, runner=runner)
+    ) as client:
+        response = client.get("/")
+
+    assert response.status_code == 200
+    assert ">清空数据</span>" in response.text
+    assert 'action="/actions/clear-data"' in response.text
+    assert 'name="scope" value="exports" checked' in response.text
+    assert 'name="scope" value="comments"' in response.text
+    assert 'name="scope" value="all"' in response.text
+    assert "保留登录授权" in response.text
+
+
+def test_clear_data_route_requires_confirmation_and_clears_selected_scope(
+    tmp_path: Path,
+) -> None:
+    local_settings = settings(tmp_path)
+    store = LocalStore(local_settings.database_path)
+    store.set_meta("last_export", {"directory": "exports/run-1"})
+    export_file = local_settings.exports_dir / "run-1" / "table.xlsx"
+    export_file.parent.mkdir(parents=True)
+    export_file.write_bytes(b"export")
+    runner = FakeRunner(store)
+
+    with TestClient(
+        create_local_app(local_settings, store=store, runner=runner)
+    ) as client:
+        token = csrf(client)
+        rejected = client.post(
+            "/actions/clear-data",
+            data={"csrf_token": token, "scope": "exports"},
+            follow_redirects=False,
+        )
+        assert rejected.status_code == 303
+        assert export_file.is_file()
+        assert "请先确认清空操作无法撤销" in client.get("/").text
+
+        accepted = client.post(
+            "/actions/clear-data",
+            data={
+                "csrf_token": csrf(client),
+                "scope": "exports",
+                "confirm_clear": "yes",
+            },
+            follow_redirects=False,
+        )
+        assert accepted.status_code == 303
+        home = client.get("/")
+
+    assert not export_file.exists()
+    assert local_settings.exports_dir.is_dir()
+    assert store.get_meta("last_export", {}) == {}
+    assert "已清空平台导出的原始数据" in home.text
+
+
+def test_clear_data_route_requires_csrf(tmp_path: Path) -> None:
+    local_settings = settings(tmp_path)
+    store = LocalStore(local_settings.database_path)
+    export_file = local_settings.exports_dir / "run-1" / "table.xlsx"
+    export_file.parent.mkdir(parents=True)
+    export_file.write_bytes(b"export")
+    runner = FakeRunner(store)
+
+    with TestClient(
+        create_local_app(local_settings, store=store, runner=runner)
+    ) as client:
+        response = client.post(
+            "/actions/clear-data",
+            data={"scope": "exports", "confirm_clear": "yes"},
+        )
+
+    assert response.status_code == 403
+    assert export_file.is_file()
+
+
+def test_clear_data_route_warns_when_physical_deletion_is_pending(
+    tmp_path: Path, monkeypatch
+) -> None:
+    local_settings = settings(tmp_path)
+    store = LocalStore(local_settings.database_path)
+    runner = FakeRunner(store)
+    monkeypatch.setattr(
+        local_app_module,
+        "clear_local_data",
+        lambda *_args: ClearDataResult(
+            scope="exports",
+            files_deleted=1,
+            directories_deleted=1,
+            pending_directories=1,
+        ),
+    )
+
+    with TestClient(
+        create_local_app(local_settings, store=store, runner=runner)
+    ) as client:
+        response = client.post(
+            "/actions/clear-data",
+            data={
+                "csrf_token": csrf(client),
+                "scope": "exports",
+                "confirm_clear": "yes",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        home = client.get("/")
+
+    assert "暂存目录因文件占用未能删除" in home.text
+
+
+def test_clear_data_route_rejects_active_jobs(tmp_path: Path) -> None:
+    local_settings = settings(tmp_path)
+    store = LocalStore(local_settings.database_path)
+    export_file = local_settings.exports_dir / "run-1" / "table.xlsx"
+    export_file.parent.mkdir(parents=True)
+    export_file.write_bytes(b"export")
+    runner = FakeRunner(store)
+
+    with TestClient(
+        create_local_app(local_settings, store=store, runner=runner)
+    ) as client:
+        store.create_job("authorize")
+        response = client.post(
+            "/actions/clear-data",
+            data={
+                "csrf_token": csrf(client),
+                "scope": "exports",
+                "confirm_clear": "yes",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        home = client.get("/")
+
+    assert export_file.is_file()
+    assert "当前仍有任务等待或运行" in home.text
 
 
 def test_export_requires_authorization(tmp_path: Path) -> None:

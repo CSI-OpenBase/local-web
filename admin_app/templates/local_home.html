@@ -105,6 +105,60 @@
         </table>
       </div>
     </section>
+
+    <section class="data-management-band" aria-labelledby="data-management-title">
+      <div>
+        <h2 id="data-management-title">数据管理</h2>
+        <p>{{ '任务运行时不可清空数据' if active_jobs else '仅删除 CSI OpenBase 在当前工作目录中管理的数据' }}</p>
+      </div>
+      <button type="button" class="button button-danger-outline" data-clear-open {% if active_jobs %}disabled{% endif %}>
+        <i data-lucide="trash-2" aria-hidden="true"></i><span>清空数据</span>
+      </button>
+    </section>
   </main>
+
+  <dialog class="clear-data-dialog" data-clear-dialog aria-labelledby="clear-data-title" aria-describedby="clear-data-summary">
+    <form method="post" action="/actions/clear-data" class="clear-data-form" data-clear-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <header class="dialog-header">
+        <div><h2 id="clear-data-title">清空数据</h2><p>此操作无法撤销</p></div>
+        <button type="button" class="icon-button dialog-close" data-clear-close title="关闭">
+          <i data-lucide="x" aria-hidden="true"></i><span class="sr-only">关闭</span>
+        </button>
+      </header>
+
+      <div class="dialog-body">
+        <div class="clear-target"><span>当前工作目录</span><code>{{ data_home }}</code></div>
+        <fieldset class="clear-options">
+          <legend>选择清理范围</legend>
+          <label class="clear-option">
+            <input type="radio" name="scope" value="exports" checked>
+            <span><strong>平台导出的原始数据</strong><small>删除已下载的表格及对应导出记录</small></span>
+          </label>
+          <label class="clear-option">
+            <input type="radio" name="scope" value="comments">
+            <span><strong>用户评论数据</strong><small>删除评论文件及评论导出记录，保留视频档案</small></span>
+          </label>
+          <label class="clear-option">
+            <input type="radio" name="scope" value="all">
+            <span><strong>全部数据</strong><small>删除全部采集归档和本地索引，保留登录授权</small></span>
+          </label>
+        </fieldset>
+
+        <p class="clear-summary" id="clear-data-summary" data-clear-summary>将删除平台导出的原始表格和对应任务记录。</p>
+        <label class="clear-confirm">
+          <input type="checkbox" name="confirm_clear" value="yes" required data-clear-confirm>
+          <span>我确认已了解清空范围，并接受数据无法恢复</span>
+        </label>
+      </div>
+
+      <footer class="dialog-actions">
+        <button type="button" class="button button-secondary" data-clear-close>取消</button>
+        <button type="submit" class="button button-danger" data-clear-submit disabled>
+          <i data-lucide="trash-2" aria-hidden="true"></i><span>清空所选数据</span>
+        </button>
+      </footer>
+    </form>
+  </dialog>
 </body>
 </html>

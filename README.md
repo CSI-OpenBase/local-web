@@ -40,6 +40,7 @@ python scripts/run_openbase.py
 - 主页发现批次位于 `works/discovery/`，逐视频档案位于 `works/videos/douyin/`；同步时记录主页可见的评论数。
 - 评论只在用户手动操作后导出，按视频和批次保存匿名化 `.jsonl`。
 - `openbase.sqlite3` 保存本地索引和任务状态；原始下载及不可变快照仍是数据源。
+- 页面可分别清空平台导出原始数据、用户评论数据或全部采集数据；工作目录根部的其他文件、运行日志和浏览器登录授权不会被 Web 清理功能删除。
 - 默认不下载视频 MP4，不保存观众昵称、用户 ID、头像、属地或创作者平台密码。
 
 完整模型见 [`docs/data-model.md`](docs/data-model.md)，数据契约位于 [`admin_app/resources/`](admin_app/resources/)。

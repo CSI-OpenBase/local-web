@@ -11,15 +11,18 @@ import json
 import re
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Iterator, Mapping
 
 
 JOB_KINDS = frozenset({"authorize", "export", "sync_videos", "comments"})
 JOB_STATUSES = frozenset(
     {"queued", "running", "succeeded", "partial", "blocked", "failed", "interrupted"}
 )
+CLEAR_DATA_SCOPES = frozenset({"exports", "comments", "all"})
+CLEAR_OPERATION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 VIDEO_ID_RE = re.compile(r"^[0-9]{8,32}$")
 
 
@@ -48,6 +51,10 @@ class ActiveCommentJobError(ValueError):
 
 class JobStateConflictError(RuntimeError):
     """Raised when a worker tries to overwrite a job it no longer owns."""
+
+
+class ActiveLocalJobsError(RuntimeError):
+    """Raised when maintenance would overlap queued or running work."""
 
 
 class LocalStore:
@@ -107,6 +114,11 @@ class LocalStore:
                     record_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS archive_clear_operations (
+                    operation_id TEXT PRIMARY KEY,
+                    scope TEXT NOT NULL,
+                    committed_at TEXT NOT NULL
+                );
                 """
             )
             video_columns = {
@@ -120,6 +132,89 @@ class LocalStore:
                     ADD COLUMN visible_comment_count INTEGER
                     """
                 )
+
+    @contextmanager
+    def exclusive_maintenance(self) -> Iterator[None]:
+        """Block job creation while maintenance verifies an idle workspace."""
+
+        with self._lock:
+            with self._connect() as connection:
+                row = connection.execute(
+                    """
+                    SELECT COUNT(*) AS count
+                      FROM archive_jobs
+                     WHERE status IN ('queued', 'running')
+                    """
+                ).fetchone()
+            if int(row["count"]):
+                raise ActiveLocalJobsError(
+                    "当前仍有任务等待或运行，请在任务完成后再清空数据"
+                )
+            yield
+
+    def clear_records(self, scope: str, *, operation_id: str) -> None:
+        if scope not in CLEAR_DATA_SCOPES:
+            raise ValueError("不支持的数据清理范围")
+        if not CLEAR_OPERATION_ID_RE.fullmatch(operation_id):
+            raise ValueError("invalid clear operation id")
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT COUNT(*) AS count
+                  FROM archive_jobs
+                 WHERE status IN ('queued', 'running')
+                """
+            ).fetchone()
+            if int(row["count"]):
+                raise ActiveLocalJobsError(
+                    "当前仍有任务等待或运行，请在任务完成后再清空数据"
+                )
+            if scope == "exports":
+                connection.execute("DELETE FROM archive_jobs WHERE kind = 'export'")
+                connection.execute("DELETE FROM app_meta WHERE key = 'last_export'")
+            elif scope == "comments":
+                connection.execute("DELETE FROM archive_jobs WHERE kind = 'comments'")
+                connection.execute(
+                    """
+                    UPDATE archive_videos
+                       SET comment_count = 0,
+                           last_comment_export_at = NULL,
+                           updated_at = ?
+                    """,
+                    (utc_now(),),
+                )
+            else:
+                connection.execute("DELETE FROM archive_jobs")
+                connection.execute("DELETE FROM archive_videos")
+                connection.execute("DELETE FROM app_meta")
+                connection.execute(
+                    "DELETE FROM sqlite_sequence WHERE name = 'archive_jobs'"
+                )
+            connection.execute(
+                """
+                INSERT INTO archive_clear_operations(
+                    operation_id, scope, committed_at
+                ) VALUES (?, ?, ?)
+                """,
+                (operation_id, scope, utc_now()),
+            )
+
+    def committed_clear_operations(self) -> dict[str, str]:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                "SELECT operation_id, scope FROM archive_clear_operations"
+            ).fetchall()
+        return {str(row["operation_id"]): str(row["scope"]) for row in rows}
+
+    def finish_clear_operation(self, operation_id: str) -> None:
+        if not CLEAR_OPERATION_ID_RE.fullmatch(operation_id):
+            raise ValueError("invalid clear operation id")
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                "DELETE FROM archive_clear_operations WHERE operation_id = ?",
+                (operation_id,),
+            )
+
     def interrupt_active_jobs(self) -> int:
         """Mark abandoned work after the caller has acquired the workspace lease."""
 
