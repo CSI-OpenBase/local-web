@@ -15,6 +15,9 @@ this project as a wheel or frozen backend.
 - Do not introduce CSI Core scoring models, proprietary weights, benchmarks, or
   commercial report logic.
 - Keep migrations and `LICENSE`/`NOTICE` resources present in built wheels.
+- Treat the root `VERSION` file as the only application, package, and release
+  version source. Versions use `x.x.xx`, start at `0.0.10`, and roll `1.1.99`
+  to `1.2.10`; use `python scripts/bump_version.py --apply` to advance it.
 - Do not commit `var/` data, `workspace-data/`, browser profiles, exports, or
   generated build artifacts.
 

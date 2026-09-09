@@ -17,6 +17,7 @@ from sqlalchemy.engine import Engine
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from . import __version__
 from .archive_lock import archive_lock
 from .account_analysis import build_account_analysis
 from .account_data import AccountDataError
@@ -98,6 +99,7 @@ def _common_context(
         running, connected = 0, False
     return {
         "request": request,
+        "app_version": __version__,
         "csrf_token": csrf_token(request),
         "flashes": pop_flashes(request),
         "nav_running_jobs": running,
@@ -224,6 +226,7 @@ def create_app(
 
     app = FastAPI(
         title="CSI OpenBase",
+        version=__version__,
         docs_url=None,
         redoc_url=None,
         lifespan=lifespan,
@@ -281,6 +284,7 @@ def create_app(
             return JSONResponse(
                 {
                     "status": "ok",
+                    "version": __version__,
                     "workspace": settings.workspace_slug,
                     "database": settings.db_name,
                 }
@@ -289,6 +293,7 @@ def create_app(
             return JSONResponse(
                 {
                     "status": "degraded",
+                    "version": __version__,
                     "workspace": settings.workspace_slug,
                     "database": settings.db_name,
                 },

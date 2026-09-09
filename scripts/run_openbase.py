@@ -29,6 +29,7 @@ def _configure_frozen_runtime() -> None:
 _configure_frozen_runtime()
 
 
+from admin_app import __version__  # noqa: E402
 from admin_app.local_app import create_local_app  # noqa: E402
 from admin_app.local_config import load_local_settings  # noqa: E402
 
@@ -95,7 +96,9 @@ def main() -> int:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
         handlers=handlers,
     )
-    logging.getLogger(__name__).info("data home: %s", settings.data_home)
+    logging.getLogger(__name__).info(
+        "CSI OpenBase %s; data home: %s", __version__, settings.data_home
+    )
     server = None
 
     def request_shutdown() -> None:

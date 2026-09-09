@@ -6,6 +6,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 import admin_app.local_app as local_app_module
+from admin_app import __version__
 from admin_app.local_app import create_local_app
 from admin_app.local_cleanup import ClearDataResult
 from admin_app.local_config import LocalSettings
@@ -73,6 +74,8 @@ def test_local_home_exposes_scoped_clear_dialog(tmp_path: Path) -> None:
         response = client.get("/")
 
     assert response.status_code == 200
+    assert client.app.version == __version__
+    assert f'<span class="brand-version">v{__version__}</span>' in response.text
     assert ">清空数据</span>" in response.text
     assert 'action="/actions/clear-data"' in response.text
     assert 'name="scope" value="exports" checked' in response.text
@@ -298,6 +301,7 @@ def test_desktop_token_guards_ui_and_identifies_health_instance(tmp_path: Path) 
         )
         assert response.status_code == 200
         assert response.json()["instance_nonce"] == "instance-123"
+        assert response.json()["version"] == __version__
         assert client.get("/").status_code == 200
 
 

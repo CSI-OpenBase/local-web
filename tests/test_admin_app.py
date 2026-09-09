@@ -264,7 +264,10 @@ def test_external_worker_startup_still_recovers_archive_transaction(
     app = main_module.create_app(settings, engine=engine, migrate=False)
 
     with TestClient(app) as client:
-        assert client.get("/health").status_code == 200
+        health = client.get("/health")
+        assert health.status_code == 200
+        assert health.json()["version"] == main_module.__version__
+        assert app.version == main_module.__version__
         assert app.state.worker_mode == "external"
 
     assert recovered == [settings.comments_dir / ".archive.lock"]

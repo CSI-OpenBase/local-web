@@ -31,6 +31,7 @@ button, input { font: inherit; letter-spacing: 0; }
 }
 .brand { display: flex; align-items: baseline; gap: 8px; font-size: 17px; }
 .brand-mark { color: #7bd2af; font-weight: 800; }
+.brand-version { color: #aeb5ba; font-size: 11px; font-weight: 600; }
 .header-status { display: flex; align-items: center; gap: 8px; color: #e4e7e9; font-size: 13px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #899198; }
 .status-dot.ok { background: #51c28f; }

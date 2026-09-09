@@ -33,6 +33,22 @@ python scripts/run_openbase.py
 
 旧的多工作区管理入口仍可通过 `csi-openbase-dashboard` 或 `python scripts/run_dashboard.py` 启动，供既有源码部署继续使用。当前后台没有公网多用户认证，不应直接暴露到公网。
 
+## Version
+
+根目录 `VERSION` 是应用、Python 包和发布版本号的唯一来源。版本格式为 `x.x.xx`，从 `0.0.10` 开始；末段从 `10` 递增到 `99`，之后将次版本加一并把末段重置为 `10`，例如 `1.1.99` 的下一版本是 `1.2.10`。
+
+查看下一版本但不修改文件：
+
+```powershell
+python scripts/bump_version.py
+```
+
+确认发布后写入下一版本：
+
+```powershell
+python scripts/bump_version.py --apply
+```
+
 ## Data model
 
 - 一个工作目录对应一个创作者账号；桌面端由用户选择目录，源码版默认使用 `var/local`。
@@ -69,6 +85,7 @@ python scripts/run_openbase.py
   scripts/                   启动、工作区、导入和分析命令
   tests/                     自动化测试与样本
   var/README.md              本地数据与备份说明
+  VERSION                    应用、Python 包和发布版本号
   pyproject.toml             包、依赖、命令入口和测试配置
 ```
 

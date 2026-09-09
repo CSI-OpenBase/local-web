@@ -16,6 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
+from . import __version__
 from .local_cleanup import (
     CLEAR_DATA_LABELS,
     clear_local_data,
@@ -115,6 +116,7 @@ def create_local_app(
 
     app = FastAPI(
         title="CSI OpenBase",
+        version=__version__,
         docs_url=None,
         redoc_url=None,
         lifespan=lifespan,
@@ -145,6 +147,7 @@ def create_local_app(
         last_discovery = store.get_meta("last_video_sync", {})
         return {
             "request": request,
+            "app_version": __version__,
             "csrf_token": csrf_token(request),
             "flashes": pop_flashes(request),
             "account": account,
@@ -163,6 +166,7 @@ def create_local_app(
         return JSONResponse(
             {
                 "status": "ok",
+                "version": __version__,
                 "mode": "local-archive",
                 "active_jobs": store.active_job_count(),
                 "instance_nonce": settings.instance_nonce,

@@ -10,7 +10,7 @@
 </head>
 <body data-active-jobs="{{ active_jobs }}" data-latest-job="{{ jobs[0].id if jobs else '' }}">
   <header class="app-header">
-    <div class="brand"><span class="brand-mark">CSI</span><strong>OpenBase</strong></div>
+    <div class="brand"><span class="brand-mark">CSI</span><strong>OpenBase</strong><span class="brand-version">v{{ app_version }}</span></div>
     <div class="header-status">
       <span class="status-dot {{ 'ok' if authorized else 'idle' }}"></span>
       <span>{{ account.display_name if authorized else '未连接账号' }}</span>
