@@ -67,17 +67,20 @@ _COVER_HOST_SUFFIXES = (
 _METRIC_ALIASES = {
     "view_count": ("view_count", "play_count", "play", "views"),
     "like_count": ("like_count", "digg_count", "likes", "digg"),
-    "comment_count": ("comment_count", "comments"),
+    "comment_count": ("comment_count", "commentCount", "comments"),
     "share_count": ("share_count", "shares"),
     "collect_count": ("collect_count", "favorite_count", "favorites"),
 }
 _METRIC_LABELS = {
     "view_count": ("播放", "观看"),
     "like_count": ("点赞",),
-    "comment_count": ("评论",),
+    "comment_count": ("评论数", "评论"),
     "share_count": ("分享",),
     "collect_count": ("收藏",),
 }
+_METRIC_VALUE_PATTERN = (
+    r"[0-9]+(?:[,，\s][0-9]{3})*(?:\.[0-9]+)?\s*(?:万|亿|[wW])?"
+)
 
 
 class VideoArchiveError(ValueError):
@@ -270,7 +273,7 @@ def _count(value: Any) -> int | None:
     if value in (None, "") or isinstance(value, bool):
         return None
     if isinstance(value, str):
-        candidate = value.strip().replace(",", "").replace(" ", "")
+        candidate = re.sub(r"\s+", "", value.strip()).replace(",", "").replace("，", "")
         multiplier = 1
         for suffix, scale in (
             ("万", 10_000),
@@ -301,7 +304,7 @@ def _declared_profile_work_count(value: str) -> int | None:
 
 def _metrics(raw: Mapping[str, Any]) -> dict[str, int]:
     containers: list[Mapping[str, Any]] = [raw]
-    for key in ("statistics", "stats", "metrics", "visible_metrics"):
+    for key in ("statistics", "statistics_v2", "stats", "metrics", "visible_metrics"):
         value = raw.get(key)
         if isinstance(value, Mapping):
             containers.insert(0, value)
@@ -326,8 +329,8 @@ def _metrics(raw: Mapping[str, Any]) -> dict[str, int]:
             continue
         for label in labels:
             patterns = (
-                rf"{re.escape(label)}[：:]?\s*([0-9]+(?:\.[0-9]+)?(?:万|亿|[wW])?)",
-                rf"([0-9]+(?:\.[0-9]+)?(?:万|亿|[wW])?)\s*{re.escape(label)}",
+                rf"{re.escape(label)}[：:]?\s*({_METRIC_VALUE_PATTERN})",
+                rf"({_METRIC_VALUE_PATTERN})\s*{re.escape(label)}",
             )
             match = None
             for pattern in patterns:
@@ -437,7 +440,14 @@ def _looks_like_aweme(value: Mapping[str, Any]) -> bool:
     )
     return has_id and any(
         key in value
-        for key in ("video", "desc", "item_title", "create_time", "statistics")
+        for key in (
+            "video",
+            "desc",
+            "item_title",
+            "create_time",
+            "statistics",
+            "statistics_v2",
+        )
     )
 
 
@@ -512,21 +522,34 @@ def extract_videos_from_dom(
 
 def _merge_records(records: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     merged: dict[str, dict[str, Any]] = {}
+    metric_priorities: dict[str, dict[str, int]] = {}
     for raw in records:
         video_id = str(raw["video_id"])
+        sources = set(raw.get("sources") or ())
+        source_priority = 2 if "response" in sources else 1 if "dom" in sources else 0
         current = merged.get(video_id)
         if current is None:
             merged[video_id] = dict(raw)
+            metric_priorities[video_id] = {
+                key: source_priority
+                for key in dict(raw.get("visible_metrics") or {})
+            }
             continue
         for field in ("title", "desc", "published_at", "cover_url"):
             if not current.get(field) and raw.get(field):
                 current[field] = raw[field]
         metrics = dict(current.get("visible_metrics") or {})
+        priorities = metric_priorities[video_id]
         for key, value in dict(raw.get("visible_metrics") or {}).items():
-            metrics[key] = max(metrics.get(key, 0), int(value))
+            priority = priorities.get(key, -1)
+            if key not in metrics or source_priority > priority:
+                metrics[key] = int(value)
+                priorities[key] = source_priority
+            elif source_priority == priority:
+                metrics[key] = max(metrics[key], int(value))
         current["visible_metrics"] = metrics
         current["sources"] = sorted(
-            set(current.get("sources") or ()) | set(raw.get("sources") or ())
+            set(current.get("sources") or ()) | sources
         )
     return [merged[key] for key in sorted(merged, key=lambda item: int(item))]
 
@@ -896,7 +919,8 @@ _DOM_PROBE = r"""
     !/^[0-9.,]+(?:万|亿|[wW])?$/.test(text)
   ) || ((image && image.alt) || '').replace(/^[^：:]{1,100}[：:]\s*/, '');
   const metricNodes = anchor.querySelectorAll(
-    '[data-e2e*="like"], [data-e2e*="play"], [aria-label*="点赞"], ' +
+    '[data-e2e*="like"], [data-e2e*="play"], [data-e2e*="comment"], ' +
+    '[aria-label*="点赞"], ' +
     '[aria-label*="播放"], [aria-label*="评论"], [aria-label*="收藏"]'
   );
   const visiblePlayCounts = Array.from(anchor.querySelectorAll('span'))

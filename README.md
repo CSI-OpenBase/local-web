@@ -37,7 +37,7 @@ python scripts/run_openbase.py
 
 - 一个工作目录对应一个创作者账号；桌面端由用户选择目录，源码版默认使用 `var/local`。
 - 每次创作者中心导出保存到 `exports/<日期时间>/`，并生成包含状态、大小和 SHA-256 的 manifest。
-- 主页发现批次位于 `works/discovery/`，逐视频档案位于 `works/videos/douyin/`。
+- 主页发现批次位于 `works/discovery/`，逐视频档案位于 `works/videos/douyin/`；同步时记录主页可见的评论数。
 - 评论只在用户手动操作后导出，按视频和批次保存匿名化 `.jsonl`。
 - `openbase.sqlite3` 保存本地索引和任务状态；原始下载及不可变快照仍是数据源。
 - 默认不下载视频 MP4，不保存观众昵称、用户 ID、头像、属地或创作者平台密码。

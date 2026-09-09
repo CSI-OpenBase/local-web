@@ -11,6 +11,7 @@ from admin_app.video_archive import (
     VideoArchiveIdentityError,
     _declared_profile_work_count,
     _launch_persistent_context,
+    _merge_records,
     _profile_listing_complete,
     _work_key_from_url,
     archive_profile_videos,
@@ -198,6 +199,60 @@ def test_dom_parser_accepts_only_douyin_video_links_and_visible_metrics() -> Non
         "like_count": 12_000,
         "comment_count": 34,
     }
+
+
+@pytest.mark.parametrize(
+    ("metric_text", "expected"),
+    [
+        ("评论 1,234", 1_234),
+        ("评论：1.2 万", 12_000),
+        ("评论数 2，345", 2_345),
+    ],
+)
+def test_dom_comment_count_accepts_grouping_and_spaced_units(
+    metric_text: str, expected: int
+) -> None:
+    videos = extract_videos_from_dom(
+        [
+            {
+                "href": "https://www.douyin.com/video/7390123456789012345",
+                "title": "评论格式测试",
+                "metric_text": metric_text,
+            }
+        ],
+        observed_at=FIRST_SEEN,
+    )
+
+    assert videos[0]["visible_metrics"]["comment_count"] == expected
+
+
+def test_structured_comment_count_wins_over_rounded_dom_metric() -> None:
+    response_record = extract_videos_from_response(
+        {
+            "aweme_list": [
+                {
+                    "aweme_id": "7390123456789012345",
+                    "desc": "精确评论数",
+                    "statistics_v2": {"commentCount": "11,950"},
+                    "video": {},
+                }
+            ]
+        },
+        observed_at=FIRST_SEEN,
+    )[0]
+    dom_record = extract_videos_from_dom(
+        [
+            {
+                "href": "https://www.douyin.com/video/7390123456789012345",
+                "metric_text": "评论 1.2万",
+            }
+        ],
+        observed_at=FIRST_SEEN,
+    )[0]
+
+    for records in ([response_record, dom_record], [dom_record, response_record]):
+        merged = _merge_records(records)
+        assert merged[0]["visible_metrics"]["comment_count"] == 11_950
 
 
 def test_response_filter_uses_author_handle_without_persisting_it() -> None:

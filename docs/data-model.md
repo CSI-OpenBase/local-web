@@ -18,6 +18,8 @@ CSI OpenBase 使用工作区外壳和四类不可变业务快照。JSON Schema �
 
 `works/work-snapshots.jsonl` 保存作品在某个观测时间的播放、互动、留存、主页访问和涨粉数据。系统识别官方作品 ID、视频 ID、`item_id` 与 `aweme_id` 等常见表头；仅在导出文件缺少稳定 ID 时，才使用标题与发布时间生成合成 ID。同一作品多次导入会保留时间序列。
 
+主页同步还会在 `works/discovery/` 保存发现批次，并在 `works/videos/douyin/<video_id>/metadata/` 保存逐视频观测记录。记录中的 `visible_metrics.comment_count` 是同步时主页或平台响应可见的评论总数；它与用户手动导出的匿名评论记录数分开维护。
+
 ## 评论
 
 `comments/comments.jsonl` 保存每条评论的最新状态，`comments/batches/` 保存历史采集批次。评论仅区分观众和创作者角色，不保存昵称、用户 ID、头像或属地。MySQL 同时保留最新态和不可变快照。

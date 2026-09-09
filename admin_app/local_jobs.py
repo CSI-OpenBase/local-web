@@ -393,6 +393,12 @@ class LocalJobRunner:
         index_records: list[dict[str, Any]] = []
         for record in result.videos:
             video_id = str(record["video_id"])
+            visible_metrics = record.get("visible_metrics")
+            visible_comment_count = (
+                visible_metrics.get("comment_count")
+                if isinstance(visible_metrics, Mapping)
+                else None
+            )
             manifest_path = (
                 self.settings.works_dir
                 / "videos"
@@ -416,6 +422,7 @@ class LocalJobRunner:
                     "manifest_path": _relative(manifest_path, self.settings.data_home),
                     "first_seen_at": str(manifest["first_seen"]),
                     "last_seen_at": str(manifest["last_seen"]),
+                    "visible_comment_count": visible_comment_count,
                 }
             )
         self.store.upsert_videos(index_records)

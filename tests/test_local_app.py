@@ -266,6 +266,7 @@ def test_comment_route_only_creates_explicit_immediate_job(tmp_path: Path) -> No
                 "manifest_path": "works/videos/douyin/7680023068660346011/manifest.json",
                 "first_seen_at": "2026-09-07T00:00:00Z",
                 "last_seen_at": "2026-09-07T00:00:00Z",
+                "visible_comment_count": 12_876,
             }
         ]
     )
@@ -273,6 +274,14 @@ def test_comment_route_only_creates_explicit_immediate_job(tmp_path: Path) -> No
     with TestClient(
         create_local_app(local_settings, store=store, runner=runner)
     ) as client:
+        home = client.get("/")
+        assert home.status_code == 200
+        assert "12,876" in home.text
+        assert "尚未导出评论" in home.text
+        assert ">导出评论</span>" in home.text
+        assert (
+            'formaction="/videos/7680023068660346011/comments"' in home.text
+        )
         response = client.post(
             "/videos/7680023068660346011/comments",
             data={"csrf_token": csrf(client)},

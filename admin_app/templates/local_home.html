@@ -72,7 +72,7 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="table-wrap">
           <table>
-            <thead><tr><th class="select-cell"><input type="checkbox" data-select-all aria-label="选择全部视频"></th><th>视频</th><th>首次发现</th><th>最近同步</th><th>评论</th><th class="action-cell">操作</th></tr></thead>
+            <thead><tr><th class="select-cell"><input type="checkbox" data-select-all aria-label="选择全部视频"></th><th>视频</th><th>首次发现</th><th>最近同步</th><th>评论数</th><th class="action-cell">操作</th></tr></thead>
             <tbody>
               {% for video in videos %}
               <tr>
@@ -80,8 +80,8 @@
                 <td><a href="{{ video.video_url }}" target="_blank" rel="noopener noreferrer" class="video-title">{{ video.title }}</a><code>{{ video.video_id }}</code></td>
                 <td><time>{{ video.first_seen_at }}</time></td>
                 <td><time>{{ video.last_seen_at }}</time></td>
-                <td><strong>{{ video.comment_count }}</strong><span class="cell-note">{{ video.last_comment_export_at|default('尚未导出', true) }}</span></td>
-                <td class="action-cell"><button type="submit" class="icon-button" formmethod="post" formaction="/videos/{{ video.video_id }}/comments" title="导出评论"><i data-lucide="play" aria-hidden="true"></i><span class="sr-only">导出评论</span></button></td>
+                <td><strong>{% if video.visible_comment_count is not none %}{{ "{:,}".format(video.visible_comment_count) }}{% else %}—{% endif %}</strong><span class="cell-note">{% if video.last_comment_export_at %}上次导出 {{ "{:,}".format(video.comment_count|default(0)) }} 条 · {{ video.last_comment_export_at }}{% else %}尚未导出评论{% endif %}</span></td>
+                <td class="action-cell"><button type="submit" class="button button-secondary comment-export-button" formmethod="post" formaction="/videos/{{ video.video_id }}/comments"><i data-lucide="message-square-down" aria-hidden="true"></i><span>导出评论</span></button></td>
               </tr>
               {% else %}
               <tr><td colspan="6" class="empty">暂无视频档案</td></tr>

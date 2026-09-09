@@ -155,17 +155,18 @@ def test_video_sync_indexes_idempotent_file_archive(tmp_path: Path) -> None:
         calls += 1
         assert kwargs["profile_url"] == "https://www.douyin.com/user/self"
         assert kwargs["expected_handle"] == "creator-handle"
+        record: dict[str, Any] = {
+            "video_id": VIDEO_ID,
+            "title": "测试视频",
+            "url": f"https://www.douyin.com/video/{VIDEO_ID}",
+            "view_count": 100 + calls,
+        }
+        if calls == 1:
+            record["comment_count"] = 34
         return archive_profile_videos(
             profile_url=kwargs["profile_url"],
             works_dir=kwargs["works_dir"],
-            records=[
-                {
-                    "video_id": VIDEO_ID,
-                    "title": "测试视频",
-                    "url": f"https://www.douyin.com/video/{VIDEO_ID}",
-                    "view_count": 100 + calls,
-                }
-            ],
+            records=[record],
             observed_at=f"2026-09-0{calls + 6}T00:00:00Z",
         )
 
@@ -188,6 +189,8 @@ def test_video_sync_indexes_idempotent_file_archive(tmp_path: Path) -> None:
     assert len(videos) == 1
     assert videos[0]["first_seen_at"] == "2026-09-07T00:00:00Z"
     assert videos[0]["last_seen_at"] == "2026-09-08T00:00:00Z"
+    assert videos[0]["visible_comment_count"] == 34
+    assert videos[0]["comment_count"] == 0
 
 
 def test_comment_export_is_timestamped_and_records_user_trigger(tmp_path: Path) -> None:

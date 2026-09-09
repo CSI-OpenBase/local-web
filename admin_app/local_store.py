@@ -102,12 +102,24 @@ class LocalStore:
                     first_seen_at TEXT NOT NULL,
                     last_seen_at TEXT NOT NULL,
                     last_comment_export_at TEXT,
+                    visible_comment_count INTEGER,
                     comment_count INTEGER NOT NULL DEFAULT 0,
                     record_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
                 """
             )
+            video_columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(archive_videos)")
+            }
+            if "visible_comment_count" not in video_columns:
+                connection.execute(
+                    """
+                    ALTER TABLE archive_videos
+                    ADD COLUMN visible_comment_count INTEGER
+                    """
+                )
     def interrupt_active_jobs(self) -> int:
         """Mark abandoned work after the caller has acquired the workspace lease."""
 
@@ -173,7 +185,7 @@ class LocalStore:
         except sqlite3.IntegrityError as exc:
             if kind == "comments":
                 raise ActiveCommentJobError(
-                    "this video already has a queued or running comment export"
+                    "该视频已有等待中或正在运行的评论导出任务"
                 ) from exc
             raise
         job = self.get_job(job_id)
@@ -269,6 +281,21 @@ class LocalStore:
                 manifest_path = str(record.get("manifest_path") or "").strip()
                 first_seen_at = str(record.get("first_seen_at") or now)
                 last_seen_at = str(record.get("last_seen_at") or now)
+                raw_visible_comment_count = record.get("visible_comment_count")
+                visible_comment_count = None
+                if raw_visible_comment_count not in (None, ""):
+                    if isinstance(raw_visible_comment_count, bool):
+                        raise ValueError("visible_comment_count must be a non-negative integer")
+                    try:
+                        visible_comment_count = int(raw_visible_comment_count)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(
+                            "visible_comment_count must be a non-negative integer"
+                        ) from exc
+                    if visible_comment_count < 0:
+                        raise ValueError(
+                            "visible_comment_count must be a non-negative integer"
+                        )
                 if not VIDEO_ID_RE.fullmatch(video_id):
                     raise ValueError("video_id must contain 8-32 digits")
                 if not title or not video_url or not manifest_path:
@@ -278,8 +305,8 @@ class LocalStore:
                     INSERT INTO archive_videos(
                         video_id, platform, title, video_url, cover_path,
                         manifest_path, first_seen_at, last_seen_at,
-                        record_json, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        visible_comment_count, record_json, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(video_id) DO UPDATE SET
                         title = excluded.title,
                         video_url = excluded.video_url,
@@ -287,6 +314,10 @@ class LocalStore:
                         manifest_path = excluded.manifest_path,
                         first_seen_at = MIN(archive_videos.first_seen_at, excluded.first_seen_at),
                         last_seen_at = MAX(archive_videos.last_seen_at, excluded.last_seen_at),
+                        visible_comment_count = CASE
+                            WHEN ? THEN excluded.visible_comment_count
+                            ELSE archive_videos.visible_comment_count
+                        END,
                         record_json = excluded.record_json,
                         updated_at = excluded.updated_at
                     """,
@@ -299,8 +330,10 @@ class LocalStore:
                         manifest_path,
                         first_seen_at,
                         last_seen_at,
+                        visible_comment_count,
                         _json(record),
                         now,
+                        visible_comment_count is not None,
                     ),
                 )
                 count += 1
