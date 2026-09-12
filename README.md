@@ -1,6 +1,12 @@
 # CSI OpenBase for Python
 
+<p align="center">
+  <img src="brand/svg/csi-openbase-lockup-horizontal.svg" alt="CSI OpenBase" width="420">
+</p>
+
 这是 CSI OpenBase 的完整 Python 源码项目，包含抖音创作者授权、创作者中心表格导出、主页视频本地归档、用户手动触发的匿名化评论导出，以及本地 Web 界面。
+
+品牌母版、配色与使用规范见 [`brand/`](brand/README.md)。
 
 正式仓库：[CSI-OpenBase/local-web](https://github.com/CSI-OpenBase/local-web)
 

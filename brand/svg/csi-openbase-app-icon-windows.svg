@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">CSI OpenBase Windows app icon</title>
+  <rect width="896" height="896" x="64" y="64" fill="#1B2320" rx="184"/>
+  <g transform="translate(112 112) scale(12.5)">
+    <path fill="#FFFFFF" d="M20 8h27a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3H21a3 3 0 0 0-3 3v22a3 3 0 0 0 3 3h32a3 3 0 0 1 3 3v4a3 3 0 0 1-3 3H20C13.373 56 8 50.627 8 44V20C8 13.373 13.373 8 20 8Z"/>
+    <rect width="31" height="7" x="25" y="25" fill="#43B8AA" rx="3.5"/>
+    <rect width="23" height="7" x="25" y="36" fill="#43B8AA" rx="3.5"/>
+  </g>
+</svg>
