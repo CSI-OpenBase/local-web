@@ -6,7 +6,7 @@
 
 SSH 克隆地址：`git@github.com:CSI-OpenBase/local-web.git`
 
-Windows 和 macOS 桌面程序使用本项目提供同一套本地后端，不另行实现采集逻辑。平台主机分别维护在 [CSI-OpenBase/winform](https://github.com/CSI-OpenBase/winform) 和 [CSI-OpenBase/mac](https://github.com/CSI-OpenBase/mac)，三个仓库可分别克隆、构建和发布。
+本项目是共享 Python 后端的规范上游。Windows 程序可从源码、wheel 或冻结后端接入；macOS 仓库为独立构建保存一份受控的 `python-web/` 源码快照，并在其中的 `UPSTREAM.md` 记录同步提交。平台主机分别维护在 [CSI-OpenBase/winform](https://github.com/CSI-OpenBase/winform) 和 [CSI-OpenBase/mac](https://github.com/CSI-OpenBase/mac)，三个仓库可分别克隆、构建和发布；共享后端变更需要显式同步并分别验证。
 
 ## Requirements
 

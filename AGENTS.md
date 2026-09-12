@@ -4,12 +4,17 @@ Canonical remote: `git@github.com:CSI-OpenBase/local-web.git`
 
 This repository is the source of truth for creator authorization, automatic data
 table export, local video archives, user-triggered anonymized comment export,
-persistence, backend APIs, and the local web UI. Windows and macOS hosts consume
-this project as a wheel or frozen backend.
+persistence, backend APIs, and the local web UI. WinForms consumes this project
+from source, a wheel, or a frozen backend. The macOS repository carries a
+controlled `python-web/` source snapshot for self-contained builds and records
+its imported commit in `python-web/UPSTREAM.md`.
 
 - Keep runtime data outside installed package directories.
 - Keep this repository independently cloneable; do not require either desktop
   host repository to be present for installation, tests, or wheel builds.
+- Propagate shared backend changes deliberately to the macOS `python-web/`
+  snapshot and verify both repositories; do not assume sibling directories are
+  synchronized automatically.
 - Preserve the authenticated desktop contract for `/health` and `/api/shutdown`.
 - Treat exported creator data and browser sessions as sensitive local data.
 - Do not introduce CSI Core scoring models, proprietary weights, benchmarks, or
