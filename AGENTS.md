@@ -42,6 +42,15 @@ its imported commit in `python-web/UPSTREAM.md`.
   profile synchronization or the explicit refresh action. `comment_count` and
   `last_comment_export_at` describe the user's latest manual content export.
   Count-only refreshes must never request, persist, or clear comment content.
+- Keep local video-archive groups separate from comment collection targets.
+  Platform groups mirror explicitly observed Douyin column IDs and names;
+  manual groups and their memberships must survive later platform syncs.
+  Removing a manual group must never remove a video archive.
+- Keep the optional comment export directory in the preserved
+  `local_preferences` metadata. The canonical internal batch remains under the
+  managed video archive; a configured external directory receives an atomic,
+  user-owned copy arranged by video and timestamp. Cleanup must never recurse
+  into or delete that caller-selected directory.
 - `docs/data-model.md` is the detailed source for local archive and cleanup
   semantics. Update it together with any change to these data boundaries.
 
@@ -51,7 +60,8 @@ its imported commit in `python-web/UPSTREAM.md`.
   their export state; `comments` clears per-video comment files and export
   state while preserving video archives and visible counts; `all` clears
   collected archives and SQLite account/video/job rows while preserving the
-  workspace shell, logs, database structure, and browser authorization.
+  workspace shell, logs, database structure, browser authorization, local
+  preferences, and user-owned comment export copies.
 - Never recursively delete a caller-supplied path. Resolve cleanup targets from
   `LocalSettings`, reject symlinks, Windows junctions, filesystem mount points,
   path escapes, and any overlap with the browser authorization directory.
