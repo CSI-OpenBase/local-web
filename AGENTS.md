@@ -42,6 +42,9 @@ its imported commit in `python-web/UPSTREAM.md`.
   profile synchronization or the explicit refresh action. `comment_count` and
   `last_comment_export_at` describe the user's latest manual content export.
   Count-only refreshes must never request, persist, or clear comment content.
+- Drive manual comment export at the documented fastest-human cadence and stop
+  as soon as strict completeness stabilizes. Performance changes must not
+  weaken root/reply pagination, relationship, or aggregate-count validation.
 - Keep local video-archive groups separate from comment collection targets.
   Platform groups mirror explicitly observed Douyin column IDs and names;
   manual groups and their memberships must survive later platform syncs.
