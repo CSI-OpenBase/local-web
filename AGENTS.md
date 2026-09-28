@@ -42,9 +42,9 @@ its imported commit in `python-web/UPSTREAM.md`.
   profile synchronization or the explicit refresh action. `comment_count` and
   `last_comment_export_at` describe the user's latest manual content export.
   Count-only refreshes must never request, persist, or clear comment content.
-- Drive manual comment export at the documented fastest-human cadence and stop
-  as soon as strict completeness stabilizes. Performance changes must not
-  weaken root/reply pagination, relationship, or aggregate-count validation.
+- Drive manual comment export at the documented 130% of average-human cadence
+  and stop as soon as strict completeness stabilizes. Performance changes must
+  not weaken root/reply pagination, relationship, or aggregate-count validation.
 - Keep incremental comment delivery separate from collection completeness.
   Every run retains a complete observed snapshot; incremental files contain
   only new or materially changed records plus required relationship context
