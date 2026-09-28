@@ -5,9 +5,12 @@ from __future__ import annotations
 import hmac
 import json
 from contextlib import asynccontextmanager
+from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import (
@@ -24,6 +27,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import Response
 
 from . import __version__
+from .csi_work_links import build_csi_work_archive
 from .local_cleanup import (
     CLEAR_DATA_LABELS,
     clear_local_data,
@@ -45,7 +49,7 @@ from .local_store import (
     LocalStore,
 )
 from .security import add_flash, csrf_token, pop_flashes, validate_csrf
-from .time_utils import beijing_display
+from .time_utils import beijing_display, beijing_slug
 from .viewmodels import pagination
 
 
@@ -53,6 +57,23 @@ APP_DIR = Path(__file__).resolve().parent
 VIDEO_PAGE_SIZES = (30, 50, 100)
 DEFAULT_VIDEO_PAGE_SIZE = VIDEO_PAGE_SIZES[0]
 MAX_VIDEO_PAGE = 1_000_000
+VIDEO_ARCHIVE_EXPORT_COLUMNS = (
+    {"key": "video_id", "label": "视频 ID", "required": True},
+    {"key": "title", "label": "标题", "required": True},
+    {"key": "published_at", "label": "发布时间", "required": True},
+    {"key": "description", "label": "描述", "required": False},
+    {"key": "video_url", "label": "视频链接", "required": False},
+    {"key": "groups", "label": "分组", "required": False},
+    {"key": "view_count", "label": "播放数", "required": False},
+    {"key": "like_count", "label": "点赞数", "required": False},
+    {"key": "comment_count", "label": "评论数", "required": False},
+    {"key": "collect_count", "label": "收藏数", "required": False},
+    {"key": "share_count", "label": "分享数", "required": False},
+    {"key": "first_seen_at", "label": "首次发现时间", "required": False},
+    {"key": "last_seen_at", "label": "最近同步时间", "required": False},
+    {"key": "observed_at", "label": "观测时间", "required": False},
+    {"key": "sources", "label": "采集来源", "required": False},
+)
 
 
 def _with_time_displays(
@@ -149,6 +170,61 @@ def _video_archive_row(
         value,
         ("published_at", "observed_at", "first_seen_at", "last_seen_at"),
     )
+
+
+def _video_archive_export_value(video: dict[str, Any], key: str) -> Any:
+    if key == "groups":
+        return " / ".join(
+            str(group.get("name") or "").strip()
+            for group in video.get("groups") or ()
+            if str(group.get("name") or "").strip()
+        )
+    if key in {"view_count", "like_count", "comment_count", "collect_count", "share_count"}:
+        return dict(video.get("metrics") or {}).get(key)
+    if key == "sources":
+        value = str(video.get("sources_display") or "")
+        return "" if value == "—" else value
+    if key in {"published_at", "first_seen_at", "last_seen_at", "observed_at"}:
+        return beijing_display(video.get(key), fallback="")
+    return video.get(key, "")
+
+
+def _video_archive_workbook(
+    videos: list[dict[str, Any]], selected_columns: tuple[str, ...]
+) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.cell import WriteOnlyCell
+    from openpyxl.styles import Font, PatternFill
+
+    labels = {
+        str(column["key"]): str(column["label"])
+        for column in VIDEO_ARCHIVE_EXPORT_COLUMNS
+    }
+    workbook = Workbook(write_only=True)
+    sheet = workbook.create_sheet("视频档案")
+    sheet.freeze_panes = "A2"
+
+    header = []
+    for key in selected_columns:
+        cell = WriteOnlyCell(sheet, value=labels[key])
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(fill_type="solid", fgColor="24323B")
+        header.append(cell)
+    sheet.append(header)
+
+    for video in videos:
+        row = []
+        for key in selected_columns:
+            value = _video_archive_export_value(video, key)
+            cell = WriteOnlyCell(sheet, value=value)
+            if isinstance(value, str):
+                cell.data_type = "s"
+            row.append(cell)
+        sheet.append(row)
+
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
 
 
 def _video_page(value: Any) -> int:
@@ -407,6 +483,7 @@ def create_local_app(
             {
                 "request": request,
                 "app_version": __version__,
+                "csrf_token": csrf_token(request),
                 "account": account,
                 "authorized": bool(account and account.get("handle")),
                 "active_jobs": store.active_job_count(),
@@ -417,6 +494,7 @@ def create_local_app(
                 ],
                 "video_total": video_page["total"],
                 "video_page_size": video_page["page_size"],
+                "video_export_columns": VIDEO_ARCHIVE_EXPORT_COLUMNS,
                 "video_pagination": pagination(
                     page=video_page["page"],
                     total_pages=video_page["pages"],
@@ -424,6 +502,41 @@ def create_local_app(
                     path="/video-archive",
                     query={"page_size": video_page["page_size"]},
                 ),
+            },
+        )
+
+    @app.post("/video-archive/export")
+    async def export_video_archive(request: Request) -> Response:
+        form = await request.form()
+        validate_csrf(request, form)
+        known_columns = {
+            str(column["key"]) for column in VIDEO_ARCHIVE_EXPORT_COLUMNS
+        }
+        requested_columns = {
+            str(value).strip() for value in form.getlist("columns")
+        }
+        if not requested_columns.issubset(known_columns):
+            raise HTTPException(status_code=400, detail="导出列无效")
+        selected_columns = tuple(
+            str(column["key"])
+            for column in VIDEO_ARCHIVE_EXPORT_COLUMNS
+            if column["required"] or column["key"] in requested_columns
+        )
+        videos = [
+            _video_archive_row(settings, video)
+            for video in store.list_videos(limit=100_000)
+        ]
+        body = _video_archive_workbook(videos, selected_columns)
+        filename = f"csi-openbase-video-archive-{beijing_slug()}.xlsx"
+        return Response(
+            content=body,
+            media_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "spreadsheetml.sheet"
+            ),
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "no-store",
             },
         )
 
@@ -526,6 +639,23 @@ def create_local_app(
         add_flash(request, message, "success")
         return _redirect("/settings")
 
+    @app.get("/exports/csi-work-links")
+    def export_csi_work_links() -> Response:
+        archive = build_csi_work_archive(store.list_videos(limit=100_000))
+        timestamp = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d-%H%M%S")
+        ascii_filename = f"csi-work-archive-{timestamp}.xlsx"
+        filename = quote(f"作品档案-{timestamp}.xlsx")
+        return Response(
+            content=archive,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{filename}'
+                ),
+                "Cache-Control": "no-store",
+            },
+        )
+
     def submit(
         request: Request,
         kind: str,
@@ -558,10 +688,10 @@ def create_local_app(
             return _redirect()
         last_video_sync = store.get_meta("last_video_sync", {})
         if not last_video_sync:
-            add_flash(request, "请先同步个人主页，再导出全部表格", "error")
+            add_flash(request, "请先同步作品档案，再导出全部表格", "error")
             return _redirect()
         if last_video_sync.get("complete") is not True:
-            add_flash(request, "个人主页档案不完整，请重新同步后再导出", "error")
+            add_flash(request, "作品档案不完整，请重新同步后再导出", "error")
             return _redirect()
         return submit(request, "export")
 

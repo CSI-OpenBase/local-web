@@ -36,6 +36,7 @@ dependencies = [
 [project.scripts]
 csi-openbase = "scripts.run_openbase:main"
 csi-openbase-dashboard = "scripts.run_dashboard:main"
+csi-openbase-export-links = "scripts.export_csi_work_links:main"
 
 [project.optional-dependencies]
 test = [
